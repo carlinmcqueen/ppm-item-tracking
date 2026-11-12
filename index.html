@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PPM Production Item Tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9ECEF; --panel:#FFFFFF; --ink:#18212C; --muted:#56626F; --line:#C9D0D7;
+  --action:#1D5DA8; --action-ink:#FFFFFF;
+  --done:#2E7A4C; --done-bg:#E4F2E9;
+  --prog:#8A6200; --prog-bg:#FFF3C9; --prog-edge:#E8B921;
+  --wait:#5B4AA0; --wait-bg:#ECE8FA;
+  --err:#A9231B; --err-bg:#FCE9E7;
+  --lock:#5F6A77;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161C; --panel:#1A2129; --ink:#E8EDF2; --muted:#9AA6B3; --line:#2E3842;
+    --action:#5B9BE6; --action-ink:#0B1520;
+    --done:#6CC892; --done-bg:#16301F;
+    --prog:#F2CC5A; --prog-bg:#3A2F0E; --prog-edge:#C9A030;
+    --wait:#B7A8F0; --wait-bg:#272140;
+    --err:#FF8A80; --err-bg:#3A1714;
+    --lock:#8D99A6;
+    color-scheme: dark;
+  }
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:18px/1.5 "Barlow",system-ui,"Segoe UI",Arial,sans-serif}
+h1,h2,h3{font-family:"Barlow Condensed","Arial Narrow",Arial,sans-serif;font-weight:700;letter-spacing:.01em;margin:0}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+header.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+header.top h1{font-size:30px}
+header.top p{margin:0;color:var(--muted);font-size:15px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px}
+.panel + .panel{margin-top:14px}
+label{display:block;font-weight:600;margin-bottom:6px}
+.scan{display:flex;gap:10px;flex-wrap:wrap}
+input,select{font:inherit;font-size:22px;min-height:52px;padding:8px 12px;border:2px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink)}
+#itemInput{flex:1 1 260px;font-family:"Barlow Condensed",Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase}
+select{width:100%;font-size:19px}
+button{font:inherit;font-weight:600;min-height:52px;padding:8px 20px;border-radius:4px;border:2px solid var(--action);cursor:pointer}
+button.primary{background:var(--action);color:var(--action-ink)}
+button.ghost{background:transparent;color:var(--action)}
+button:disabled{cursor:not-allowed;background:var(--panel);color:var(--muted);border:2px dashed var(--muted)}
+input::placeholder{color:var(--muted);opacity:1}
+input[aria-invalid="true"]{border-color:var(--err)}
+.skip{position:absolute;left:-999px;top:8px;background:var(--action);color:var(--action-ink);padding:10px 16px;border-radius:4px;z-index:10}
+.skip:focus{left:8px}
+.route-title{font-size:24px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid var(--prog-edge);outline-offset:2px}
+.hint{color:var(--muted);font-size:15px;margin:8px 0 0}
+.msg{border-radius:4px;padding:14px 16px;margin-top:14px;border-left:6px solid}
+.msg strong{display:block;font-size:19px}
+.msg.err{background:var(--err-bg);border-color:var(--err);color:var(--ink)}
+.msg.ok{background:var(--done-bg);border-color:var(--done)}
+.msg.busy{background:var(--panel);border-color:var(--line);color:var(--muted)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 20px;margin-top:4px}
+.facts dt{color:var(--muted);font-size:14px}
+.facts dd{margin:0;font-weight:600;font-size:19px}
+.big{font-family:"Barlow Condensed",Arial,sans-serif;font-size:40px;line-height:1.05}
+.stage{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.stage > div{border:2px solid var(--line);border-radius:4px;padding:12px}
+.stage .loc{border-style:dashed;color:var(--muted)}
+.stage h3{font-size:18px;color:var(--muted)}
+.stage p{margin:4px 0 0;font-weight:600}
+@media (max-width:560px){.stage{grid-template-columns:1fr}}
+.route{list-style:none;margin:14px 0 0;padding:0;position:relative}
+.route::before{content:"";position:absolute;left:27px;top:10px;bottom:10px;width:4px;background:var(--line);border-radius:2px}
+.step{position:relative;display:grid;grid-template-columns:58px 1fr auto;gap:14px;align-items:center;padding:12px 0}
+.seq{position:relative;z-index:1;width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-family:"Barlow Condensed",Arial,sans-serif;font-size:22px;font-weight:700;background:var(--panel);border:3px solid var(--lock);color:var(--lock)}
+.step.done .seq{background:var(--done);border-color:var(--done);color:var(--panel)}
+.step.prog .seq{background:var(--prog-bg);border-color:var(--prog-edge);color:var(--prog);border-style:double;border-width:5px}
+.step.wait .seq{background:var(--wait-bg);border-color:var(--wait);color:var(--wait);border-style:dashed}
+.step.ready .seq{border-color:var(--action);color:var(--action)}
+.step h3{font-size:21px}
+.step .meta{color:var(--muted);font-size:15px;margin-top:2px}
+.tag{display:inline-block;font-size:15px;font-weight:600;padding:2px 8px;border-radius:3px;margin-top:6px;border:1px solid currentColor}
+.tag.done{color:var(--done)} .tag.prog{color:var(--prog)} .tag.wait{color:var(--wait)} .tag.ready{color:var(--action)} .tag.lock{color:var(--lock)}
+.why{font-size:15px;color:var(--muted);max-width:220px;text-align:right}
+@media (max-width:560px){.step{grid-template-columns:58px 1fr}.step .act{grid-column:2}.why{text-align:left;max-width:none}}
+.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.row > div{flex:1 1 260px}
+.hidden{display:none}
+.foot{color:var(--muted);font-size:15px;margin-top:20px}
+@media (prefers-reduced-motion: no-preference){.msg.ok{animation:pop .35s ease-out}@keyframes pop{from{transform:scale(.98);opacity:.4}to{transform:none;opacity:1}}}
+</style>
+</head>
+<body>
+<a class="skip" href="#itemInput">Skip to item ID</a>
+<div class="wrap">
+  <header class="top">
+    <h1>Production item tracking</h1>
+    <p>Pacific Precision Manufacturing</p>
+  </header>
+  <main>
+
+  <!-- STEP 1: Identify the item -->
+  <section class="panel" aria-labelledby="scanLabel">
+    <label id="scanLabel" for="itemInput">Scan or type the production item ID</label>
+    <form class="scan" id="lookupForm" autocomplete="off">
+      <input id="itemInput" name="item" placeholder="PO6-201-01" aria-describedby="scanHint lookupMsg" autocapitalize="characters" spellcheck="false" autofocus>
+      <button class="primary" type="submit" id="findBtn">Find item</button>
+    </form>
+    <p class="hint" id="scanHint">The barcode on the traveler tag works, or the item number.</p>
+    <div id="lookupMsg" role="status" aria-live="polite"></div>
+  </section>
+
+  <div id="itemArea" class="hidden">
+    <section class="panel" aria-labelledby="itemTitle">
+      <h2 id="itemTitle" class="big" tabindex="-1"></h2>
+      <dl class="facts" id="facts"></dl>
+      <div class="stage">
+        <div><h3>Last recorded stage</h3><p id="lastStage"></p></div>
+        <div class="loc"><h3>Physical location</h3><p>Not tracked by the system. Check the floor.</p></div>
+      </div>
+    </section>
+
+    <!-- STEP 2: Record production activity -->
+    <section class="panel" aria-labelledby="whoLabel">
+      <div class="row">
+        <div>
+          <label id="whoLabel" for="employeeSelect">Who is doing the work?</label>
+          <select id="employeeSelect" aria-describedby="needName"><option value="">Choose your name</option></select>
+          <p class="hint" id="needName">Choose your name to turn on the Start buttons.</p>
+        </div>
+        <button class="ghost" type="button" id="refreshBtn">Reload from database</button>
+      </div>
+      <div id="startMsg" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="routeTitle">
+      <h2 id="routeTitle" class="route-title">Operations in order</h2>
+      <ol class="route" id="route"></ol>
+    </section>
+  </div>
+
+  </main>
+  <footer><p class="foot">Times are set by the database when Start is pressed. Work center is not part of the current data model, so it is not shown.</p></footer>
+</div>
+
+<script>
+const SUPABASE_URL = "https://puwibaekkksjolvcsnqo.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1d2liYWVra2tzam9sdmNzbnFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MzE3MzAsImV4cCI6MjEwOTMwNzczMH0.B0eiLet1xzr6DEctik6jRH4wXiW_Q-X-a1nTWBZ00AQ";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtTime = t => t ? new Date(t).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : "";
+let current = null;   // the item as last loaded from the database
+let busy = false;
+
+// Call a database function through the Supabase REST API
+async function rpc(name, args){
+  let res;
+  try{
+    res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` },
+      body: JSON.stringify(args || {})
+    });
+  }catch(e){
+    throw new Error("Could not reach the database. Check the network connection and try again.");
+  }
+  const body = await res.json().catch(() => null);
+  if(!res.ok) throw new Error((body && body.message) || `The database returned an error (${res.status}).`);
+  return body;
+}
+
+function message(el, kind, title, text){
+  const role = kind === "err" ? ' role="alert"' : "";
+  el.innerHTML = `<div class="msg ${kind}" tabindex="-1"${role}><strong>${esc(title)}</strong>${text ? esc(text) : ""}</div>`;
+  return el.firstElementChild;
+}
+
+// ---------- STEP 1: lookup ----------
+async function lookup(raw, {quiet=false} = {}){
+  const entered = (raw || "").trim();
+  const box = $("lookupMsg");
+  $("itemInput").removeAttribute("aria-invalid");
+  if(!entered){ $("itemInput").setAttribute("aria-invalid","true"); message(box, "err", "Enter an item ID.", "Scan the tag or type the ID, then press Find item."); return; }
+  if(!quiet) message(box, "busy", "Looking up " + entered.toUpperCase() + "…", "");
+  try{
+    const data = await rpc("ppm_lookup_item", { p_item: entered });
+    if(!data || !data.found){
+      current = null;
+      $("itemArea").classList.add("hidden");
+      $("itemInput").setAttribute("aria-invalid","true");
+      message(box, "err", `No item found for ${entered.toUpperCase()}.`, "Check the tag and scan again. IDs look like PO6-201-01.");
+      $("itemInput").select();
+      return;
+    }
+    current = data;
+    box.innerHTML = "";
+    history.replaceState(null, "", "#" + encodeURIComponent(data.barcode));
+    render();
+    if(!quiet) $("itemTitle").focus();
+  }catch(e){
+    message(box, "err", "Lookup failed.", e.message);
+  }
+}
+
+function stepState(s){
+  if(s.is_done) return {cls:"done", tag:"Done"};
+  if(s.activity_status === "In Progress") return {cls:"prog", tag:"In progress"};
+  if(s.activity_status === "Completed"){
+    return s.inspection_result === "Fail" ? {cls:"wait", tag:"Failed inspection"} : {cls:"wait", tag:"Waiting for inspection"};
+  }
+  if(!s.block_reason) return {cls:"ready", tag:"Ready to start"};
+  return {cls:"lock", tag:"Not started"};
+}
+
+function render(){
+  const d = current;
+  $("itemArea").classList.remove("hidden");
+  $("itemTitle").textContent = d.barcode;
+  $("facts").innerHTML = [
+    ["Product", `${d.item_code} ${d.item_name}`],
+    ["Production order", d.production_order_id],
+    ["Order status", d.order_status],
+    ["Routing revision", "Rev " + d.routing_revision],
+    ["Customer", (d.customers || []).join(", ") || "None allocated"]
+  ].map(([k,v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("");
+
+  const recorded = (d.steps || []).filter(s => s.activity_id);
+  const last = recorded[recorded.length - 1];
+  $("lastStage").textContent = last
+    ? `Step ${last.sequence_no} ${last.operation_name}, ${stepState(last).tag.toLowerCase()} (${fmtTime(last.start_time)})`
+    : "No work recorded yet";
+
+  const noEmployee = !$("employeeSelect").value;
+  $("route").innerHTML = (d.steps || []).map(s => {
+    const st = stepState(s);
+    const who = s.activity_id ? `${esc(s.employee_name)}, started ${esc(fmtTime(s.start_time))}` : "";
+    const insp = s.requires_inspection ? "Inspection required" : "";
+    const meta = [esc(s.operation_id), insp, who].filter(Boolean).join(". ");
+    let act = "";
+    if(st.cls === "ready"){
+      act = `<button class="primary" data-step="${s.routing_step_id}" ${noEmployee || busy ? 'disabled aria-describedby="needName"' : ""}
+               aria-label="Start step ${esc(s.sequence_no)}, ${esc(s.operation_name)}">Start</button>
+             ${noEmployee ? '<div class="why">Choose your name first.</div>' : ""}`;
+    }else if(st.cls === "lock" && s.block_reason){
+      act = `<div class="why">${esc(s.block_reason)}</div>`;
+    }
+    return `<li class="step ${st.cls}">
+      <div class="seq" aria-hidden="true">${esc(s.sequence_no)}</div>
+      <div><h3><span class="sr">Step ${esc(s.sequence_no)}: </span>${esc(s.operation_name)}</h3><div class="meta">${meta}</div><span class="tag ${st.cls}">${esc(st.tag)}</span></div>
+      <div class="act">${act}</div></li>`;
+  }).join("");
+}
+
+// ---------- STEP 2: start an operation ----------
+async function startOperation(stepId){
+  const emp = $("employeeSelect").value;
+  const box = $("startMsg");
+  if(!emp){ message(box, "err", "Choose who is doing the work.", ""); return; }
+  const step = current.steps.find(s => s.routing_step_id === stepId);
+  busy = true; render();
+  message(box, "busy", `Saving start of step ${step.sequence_no}…`, "");
+  try{
+    const r = await rpc("ppm_start_operation", { p_item: current.barcode, p_routing_step_id: stepId, p_employee_id: Number(emp) });
+    // Only reached after the database confirms the insert
+    message(box, "ok", `Started step ${r.sequence_no} ${r.operation_name}.`,
+      ` ${r.production_item}, ${r.employee_name}, ${fmtTime(r.start_time)}. Record #${r.activity_id} saved.`);
+  }catch(e){
+    message(box, "err", "Not started.", e.message);
+  }finally{
+    busy = false;
+    await lookup(current.barcode, {quiet:true});   // reload from the database so the screen shows what was saved
+    const m = box.firstElementChild; if(m) m.focus();
+  }
+}
+
+async function loadEmployees(){
+  try{
+    const list = await rpc("ppm_list_employees", {});
+    $("employeeSelect").insertAdjacentHTML("beforeend",
+      list.map(e => `<option value="${e.employee_id}">${esc(e.employee_name)} (${esc(e.role)})</option>`).join(""));
+  }catch(e){
+    message($("startMsg"), "err", "Could not load employees.", e.message);
+  }
+}
+
+$("lookupForm").addEventListener("submit", ev => { ev.preventDefault(); $("startMsg").innerHTML = ""; lookup($("itemInput").value); });
+$("refreshBtn").addEventListener("click", () => current && lookup(current.barcode));
+$("employeeSelect").addEventListener("change", () => { $("needName").hidden = !!$("employeeSelect").value; if(current) render(); });
+$("route").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-step]");
+  if(b && !b.disabled) startOperation(Number(b.dataset.step));
+});
+
+loadEmployees();
+const fromLink = decodeURIComponent(location.hash.slice(1));
+if(fromLink){ $("itemInput").value = fromLink; lookup(fromLink); }
+</script>
+</body>
+</html>
